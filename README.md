@@ -18,6 +18,7 @@ Currently supports
     - Deezer
     - Yandex Music
     - Pretzel.rocks
+    - Apple Music
 
 <img src="src/gui/images/tuna.png" alt="hey tuna" width="180px">
 
