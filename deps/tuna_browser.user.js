@@ -34,9 +34,13 @@
     var last_state = {};
 
     function post(data, useGM = false) {
-        if (data.status) {
+         if (data.status) {
+            /* if this tab isn't playing and the status hasn't changed we don't send an update
+             * otherwise tabs that are paused would constantly send the paused/stopped state
+             * which interferes another tab that is playing something
+             */
             if (data.status !== "playing" && last_state.status === data.status) {
-                return;
+                return; // Prevent the paused state from being continously sent, since this tab is not playing, should prevent tabs from clashing with eachother
             }
         }
         last_state = data;
