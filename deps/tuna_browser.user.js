@@ -12,7 +12,9 @@
 // @match        *://play.pretzel.rocks/*
 // @match        *://*.youtube.com/*
 // @match        *://app.plex.tv/*
+// @match        *://music.apple.com/*
 // @grant        unsafeWindow
+// @grant        GM.xmlHttpRequest
 // @license      GPLv2
 // ==/UserScript==
 
@@ -31,8 +33,8 @@
     var cooldown = 0;
     var last_state = {};
 
-    function post(data) {
-        if (data.status) {
+    function post(data, useGM = false) {
+         if (data.status) {
             /* if this tab isn't playing and the status hasn't changed we don't send an update
              * otherwise tabs that are paused would constantly send the paused/stopped state
              * which interferes another tab that is playing something
@@ -43,23 +45,44 @@
         }
         last_state = data;
         var url = 'http://localhost:' + port + '/';
-        var xhr = new XMLHttpRequest();
-        xhr.open('POST', url);
 
-        xhr.setRequestHeader('Accept', 'application/json');
-        xhr.setRequestHeader('Content-Type', 'application/json');
-        xhr.setRequestHeader('Access-Control-Allow-Headers', '*');
-        xhr.setRequestHeader('Access-Control-Allow-Origin', '*');
+        if(!useGM)
+        {
+            var xhr = new XMLHttpRequest();
+            xhr.open('POST', url);
 
-        xhr.onreadystatechange = function () {
-            if (xhr.readyState === 4) {
-                if (xhr.status !== 200) {
-                    failure_count++;
+            xhr.setRequestHeader('Accept', 'application/json');
+            xhr.setRequestHeader('Content-Type', 'application/json');
+            xhr.setRequestHeader('Access-Control-Allow-Headers', '*');
+            xhr.setRequestHeader('Access-Control-Allow-Origin', '*');
+
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState === 4) {
+                    if (xhr.status !== 200) {
+                        failure_count++;
+                    }
                 }
-            }
-        };
+            };
 
-        xhr.send(JSON.stringify({ data, hostname: window.location.hostname, date: Date.now() }));
+            xhr.send(JSON.stringify({ data, hostname: window.location.hostname, date: Date.now() }));
+        }
+        else
+        {
+            GM.xmlHttpRequest({
+                method: "POST",
+                url: url,
+                headers: {
+                    "Content-Type": "application/json",
+                    "Accept": "application/json"
+                },
+                data: JSON.stringify({ data, hostname: window.location.hostname, date: Date.now() }),
+                onload: function(response) {
+                    if (response.status !== 200) {
+                        failure_count++;
+                    }
+                }
+            });
+        }
     }
 
     // Safely query something, and perform operations on it
@@ -315,6 +338,26 @@
 
                     if (title !== null) {
                         post({ cover, title, artists, status, progress, duration, album, album_url });
+                    }
+                }
+            } else if (hostname === "music.apple.com") {
+                // Apple music support by theoverwaerde
+                let shadowRoot = document.querySelector("amp-lcd").shadowRoot;
+
+                let status = query('.playback-play__play', e => e.getAttribute("aria-hidden") ? "playing" : "stopped", 'unknown');
+
+                if (navigator.mediaSession.metadata) {
+                    let title = navigator.mediaSession.metadata.title;
+                    let artists = navigator.mediaSession.metadata.artist.split(", ");
+                    let album = navigator.mediaSession.metadata.album;
+                    let progress = shadowRoot.querySelector("#playback-progress").getAttribute("aria-valuenow") * 1000;
+                    let duration = shadowRoot.querySelector("#playback-progress").getAttribute("max") * 1000;
+                    let cover = shadowRoot.querySelector(".lcd__artwork-container.lcd__artwork > picture > img").src;
+                    let end = cover.lastIndexOf("/");
+                    cover = cover.substring(0, end) + "/512x512.jpg";
+
+                    if (title !== null) {
+                        post({ status, title, artists, progress, duration, album, cover }, true);
                     }
                 }
             }
